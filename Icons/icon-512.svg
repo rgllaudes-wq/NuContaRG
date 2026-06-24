@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1e3a5f"/>
+  <g transform="translate(256,240)" stroke="#ffffff" stroke-width="16" fill="none">
+    <path d="M0-100L-120-40 0 20 120-40Z"/>
+    <path d="M-120 20L0 80 120 20"/>
+    <path d="M-120-40L0 20 120-40"/>
+  </g>
+  <text x="256" y="420" text-anchor="middle" font-family="serif" font-weight="700" font-size="72" fill="#ffffff" letter-spacing="2">NuConta</text>
+</svg>
