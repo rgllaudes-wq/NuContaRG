@@ -1,78 +1,46 @@
-const CACHE_NAME = 'nuconta-v1';
+// NuContaRG — Service Worker v1
+const CACHE = 'nuconta-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg',
-  '/icons/icon.svg'
+  '/NuContaRG/',
+  '/NuContaRG/index.html',
+  '/NuContaRG/icon-192.png',
+  '/NuContaRG/icon-512.png'
 ];
 
-// Install — cache core assets
+// Instalación: cachear los recursos principales
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
   );
   self.skipWaiting();
 });
 
-// Activate — remove old caches
+// Activación: limpiar cachés antiguas
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-// Fetch — network-first for navigation, cache-first for assets
+// Fetch: Network-first para que siempre cargue la última versión
+// Si falla la red (offline), sirve desde caché
 self.addEventListener('fetch', event => {
-  const { request } = event;
+  // Solo interceptar peticiones GET del mismo origen
+  if (event.request.method !== 'GET') return;
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return;
-
-  // For navigation requests (HTML pages): network-first
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  // For Google Fonts and other external resources: cache-first
-  if (request.url.includes('fonts.googleapis.com') || request.url.includes('fonts.gstatic.com')) {
-    event.respondWith(
-      caches.match(request).then(cached => {
-        if (cached) return cached;
-        return fetch(request).then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          return response;
-        });
-      })
-    );
-    return;
-  }
-
-  // For local assets: cache-first, fallback to network
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-      return fetch(request).then(response => {
-        if (response.ok) {
+    fetch(event.request)
+      .then(response => {
+        // Guardar copia en caché si la respuesta es válida
+        if (response && response.status === 200) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          caches.open(CACHE).then(cache => cache.put(event.request, clone));
         }
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
