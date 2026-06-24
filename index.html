@@ -269,8 +269,10 @@ input[type=checkbox]{accent-color:#3b82f6;width:15px;height:15px;cursor:pointer;
 
 </style>
 <!-- PWA -->
+<link rel="icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1e3a5f">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="NuConta">
@@ -2765,7 +2767,8 @@ function _calcInitDrag() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/NuContaRG/sw.js')
-        .catch(err => console.warn('SW no registrado:', err));
+        .then(r => console.log('SW registrado:', r.scope))
+        .catch(err => console.warn('SW error:', err));
     });
   }
 </script>
