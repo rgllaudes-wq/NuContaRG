@@ -409,6 +409,7 @@ input[type=checkbox]{accent-color:#3b82f6;width:15px;height:15px;cursor:pointer;
           </select>
           <input type="date" class="search-input" id="tr-from" onchange="onTrPeriodChange()" style="max-width:150px">
           <input type="date" class="search-input" id="tr-to" onchange="onTrPeriodChange()" style="max-width:150px">
+          <button class="btn btn-ghost btn-sm" onclick="printTransacciones()" title="Imprimir movimientos filtrados">🖨️ <span data-i18n="tr.print">Imprimir</span></button>
         </div>
         <!-- Barra de acciones en lote (aparece al seleccionar) -->
         <div class="bulk-bar" id="bulk-bar">
@@ -439,6 +440,7 @@ input[type=checkbox]{accent-color:#3b82f6;width:15px;height:15px;cursor:pointer;
   <!-- CUENTAS -->
   <div id="page-cuentas" class="page">
     <div class="page-content">
+      <div class="kpi-grid" id="kpi-grid-cuentas" style="margin-bottom:16px"></div>
       <div class="cuenta-cards" id="cuenta-cards"></div>
       <div class="section-header"><div class="section-title" data-i18n="cuentas.detail">Detalle de Cuentas</div></div>
       <div class="table-wrap">
@@ -789,7 +791,7 @@ const I18N = {
     'tr.searchPlaceholder':'🔍 Buscar…', 'tr.allAccounts':'Todas las cuentas', 'tr.allCategories':'Todas las categorías',
     'tr.type':'Tipo', 'tr.typeIncome':'💰 Ingresos', 'tr.typeExpense':'💸 Gastos',
     'tr.typeIncomeLabel':'Ingresos', 'tr.typeExpenseLabel':'Gastos',
-    'tr.selected':'seleccionadas', 'tr.selectAll':'Seleccionar todas', 'tr.deleteSelected':'Borrar seleccionadas',
+    'tr.selected':'seleccionadas', 'tr.selectAll':'Seleccionar todas', 'tr.deleteSelected':'Borrar seleccionadas', 'tr.print':'Imprimir',
     'tr.transactionSelected':'transacción seleccionada', 'tr.transactionsSelected':'transacciones seleccionadas',
     'tr.confirmDelete':'¿Eliminar', 'tr.confirmDeleteSub':'Esta acción no se puede deshacer.',
     'cat.totalExpenses':'Total Gastos', 'cat.totalIncome':'Total Ingresos',
@@ -838,7 +840,7 @@ const I18N = {
     'tr.searchPlaceholder':'🔍 Search…', 'tr.allAccounts':'All accounts', 'tr.allCategories':'All categories',
     'tr.type':'Type', 'tr.typeIncome':'💰 Income', 'tr.typeExpense':'💸 Expenses',
     'tr.typeIncomeLabel':'Income', 'tr.typeExpenseLabel':'Expenses',
-    'tr.selected':'selected', 'tr.selectAll':'Select all', 'tr.deleteSelected':'Delete selected',
+    'tr.selected':'selected', 'tr.selectAll':'Select all', 'tr.deleteSelected':'Delete selected', 'tr.print':'Print',
     'tr.transactionSelected':'transaction selected', 'tr.transactionsSelected':'transactions selected',
     'tr.confirmDelete':'Delete', 'tr.confirmDeleteSub':'This action cannot be undone.',
     'cat.totalExpenses':'Total Expenses', 'cat.totalIncome':'Total Income',
@@ -1031,7 +1033,6 @@ function onTrPeriodChange() {
 // ── renderDashboard ──────────────────────────────────────────────────
 function renderDashboard(){
   const allTrans = get(K.trans);
-  const cuentas  = get(K.cuentas);
   const p        = getDashPeriod();
 
   // Filtrar transacciones por periodo seleccionado
@@ -1040,17 +1041,6 @@ function renderDashboard(){
   if (p.to)   trans = trans.filter(t => t.fecha <= p.to);
 
   // KPIs — todos filtrados por el periodo seleccionado
-  // Patrimonio: saldoInicial de cada cuenta + transacciones hasta la fecha "hasta"
-  // (acumulado histórico hasta ese día, independiente del "desde")
-  const transHasta = p.to
-    ? allTrans.filter(t => t.fecha <= p.to)
-    : allTrans;
-  const totalSaldo = cuentas.reduce((s, c) => {
-    const mv = transHasta.filter(t => t.cuentaId == c.id)
-                         .reduce((x, t) => x + signedAmount(t.importe, t.catId), 0);
-    return s + (c.saldoInicial || 0) + mv;
-  }, 0);
-
   const totalI  = trans.filter(t=>isIngreso(t.catId)).reduce((s,t)=>s+Math.abs(+t.importe),0);
   const totalG  = trans.filter(t=>!isIngreso(t.catId)).reduce((s,t)=>s+Math.abs(+t.importe),0);
   const balance = totalI - totalG;
@@ -1061,7 +1051,6 @@ function renderDashboard(){
     : t('dash.allHistory');
 
   document.getElementById('kpi-grid').innerHTML=`
-    <div class="kpi-card gold"><div class="kpi-label">${t('kpi.equity')}${p.to ? ' '+t('common.asOf')+' ' + dfmt(p.to) : ' '+t('common.total')}</div><div class="kpi-value gold">${fmtNum(totalSaldo)} ${currencySymbol()}</div><div class="kpi-sub">${cuentas.length} ${cuentas.length!==1?t('common.accounts'):t('common.account')} · ${p.to ? t('common.upTo')+' ' + dfmt(p.to) : t('common.currentBalance')}</div></div>
     <div class="kpi-card green"><div class="kpi-label">${t('kpi.income')}</div><div class="kpi-value green">+${fmtNum(totalI)} ${currencySymbol()}</div><div class="kpi-sub">${trans.filter(tr=>isIngreso(tr.catId)).length} ${t('common.mov')} · ${periodoStr}</div></div>
     <div class="kpi-card red"><div class="kpi-label">${t('kpi.expense')}</div><div class="kpi-value red">${fmtNum(totalG)} ${currencySymbol()}</div><div class="kpi-sub">${trans.filter(tr=>!isIngreso(tr.catId)).length} ${t('common.mov')} · ${periodoStr}</div></div>
     <div class="kpi-card ${balance>=0?'green':'red'}"><div class="kpi-label">${t('kpi.balance')}</div><div class="kpi-value ${balance>=0?'green':'red'}">${eur(balance)}</div><div class="kpi-sub">${t('kpi.income')} − ${t('kpi.expense')} · ${periodoStr}</div></div>`;
@@ -1344,6 +1333,110 @@ function renderTrans(){
     </div>`;
 }
 
+/** Imprime en la impresora predeterminada los movimientos que cumplen los filtros/periodo actualmente seleccionados en la página de Movimientos */
+function printTransacciones(){
+  const tr = getFilteredTrans();
+  const lang = getConfig().lang;
+  const isEn = lang === 'en';
+
+  const fFrom = document.getElementById('tr-from')?.value || '';
+  const fTo   = document.getElementById('tr-to')?.value   || '';
+  const q     = document.getElementById('tr-search')?.value || '';
+  const fC    = document.getElementById('tr-cuenta')?.value || '';
+  const fCat  = document.getElementById('tr-cat')?.value || '';
+  const fT    = document.getElementById('tr-tipo')?.value || '';
+
+  const cuentaNombre = fC ? getCuenta(fC) : '';
+  const catNombre    = fCat ? getCat(fCat) : '';
+
+  const filtros = [];
+  filtros.push((isEn?'Period: ':'Periodo: ') + (fFrom?dfmt(fFrom):(isEn?'start':'inicio')) + ' – ' + (fTo?dfmt(fTo):(isEn?'end':'fin')));
+  if (q)     filtros.push((isEn?'Search: "':'Búsqueda: "') + q + '"');
+  if (fC)    filtros.push((isEn?'Account: ':'Cuenta: ') + cuentaNombre);
+  if (fCat)  filtros.push((isEn?'Category: ':'Categoría: ') + catNombre);
+  if (fT)    filtros.push((isEn?'Type: ':'Tipo: ') + (fT==='I'?(isEn?'Income':'Ingresos'):(isEn?'Expense':'Gastos')));
+
+  const net = tr.reduce((s,t)=>s+signedAmount(t.importe,t.catId),0);
+  const ingresos = tr.reduce((s,t)=>s+(isIngreso(t.catId)?Math.abs(+t.importe):0),0);
+  const gastos   = tr.reduce((s,t)=>s+(!isIngreso(t.catId)?Math.abs(+t.importe):0),0);
+
+  const rowsHtml = tr.length ? tr.map((t,i)=>{
+    const s = signedAmount(t.importe, t.catId);
+    return `<tr>
+      <td class="c-num">${i+1}</td>
+      <td>${dfmt(t.fecha)}</td>
+      <td>${(t.concepto||'').replace(/</g,'&lt;')}</td>
+      <td>${getCat(t.catId).replace(/</g,'&lt;')}</td>
+      <td>${getCuenta(t.cuentaId).replace(/</g,'&lt;')}</td>
+      <td class="c-num ${s>=0?'pos':'neg'}">${eur(s)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">${isEn?'No transactions match the current filters':'No hay movimientos que cumplan los filtros actuales'}</td></tr>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast(isEn?'Please allow pop-ups to print':'Permite las ventanas emergentes para imprimir'); return; }
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="${isEn?'en':'es'}">
+<head>
+<meta charset="UTF-8">
+<title>NuContaRG — ${isEn?'Transactions':'Movimientos'}</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 0; }
+  header { display:flex; align-items:center; justify-content:space-between; border-bottom: 2px solid #1e3a5f; padding-bottom: 10px; margin-bottom: 14px; }
+  header h1 { font-size: 18px; margin: 0; color: #1e3a5f; }
+  header .sub { font-size: 11px; color: #666; margin-top: 2px; }
+  .filtros { font-size: 11px; color: #333; margin-bottom: 14px; }
+  .filtros span { display:inline-block; background:#f0f2f5; border-radius:6px; padding:3px 9px; margin:0 6px 6px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { text-align:left; background:#1e3a5f; color:#fff; padding:6px 8px; font-weight:600; }
+  tbody td { padding:5px 8px; border-bottom: 1px solid #e2e5e9; }
+  tbody tr:nth-child(even) { background:#f7f9fb; }
+  .c-num { text-align:right; white-space:nowrap; }
+  .pos { color:#0a7a3d; font-weight:600; }
+  .neg { color:#c22; font-weight:600; }
+  tfoot td { padding:8px; font-weight:700; border-top:2px solid #1e3a5f; }
+  .resumen { display:flex; gap:22px; margin-top:16px; font-size: 12px; }
+  .resumen div b { display:block; font-size:15px; }
+  footer { margin-top: 20px; font-size: 9.5px; color: #999; text-align:right; }
+  @media print { .no-print { display:none; } }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>NuContaRG</h1>
+      <div class="sub">${isEn?'Transactions report':'Informe de movimientos'}</div>
+    </div>
+    <div class="sub">${isEn?'Generated':'Generado'}: ${new Date().toLocaleString(isEn?'en-GB':'es-ES')}</div>
+  </header>
+  <div class="filtros">${filtros.map(f=>`<span>${f}</span>`).join('')}</div>
+  <table>
+    <thead><tr>
+      <th class="c-num">#</th>
+      <th>${isEn?'Date':'Fecha'}</th>
+      <th>${isEn?'Concept':'Concepto'}</th>
+      <th>${isEn?'Category':'Categoría'}</th>
+      <th>${isEn?'Account':'Cuenta'}</th>
+      <th class="c-num">${isEn?'Amount':'Importe'}</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="resumen">
+    <div>${isEn?'Transactions':'Movimientos'}<b>${tr.length}</b></div>
+    <div>${isEn?'Income':'Ingresos'}<b class="pos">${eurA(ingresos)}</b></div>
+    <div>${isEn?'Expense':'Gastos'}<b class="neg">${eurA(gastos)}</b></div>
+    <div>${isEn?'Net':'Neto'}<b class="${net>=0?'pos':'neg'}">${eur(net)}</b></div>
+  </div>
+  <footer>NuContaRG</footer>
+</body>
+</html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{ win.print(); }, 300);
+}
+
 /** Enter mueve el foco al siguiente campo del formulario (en vez de Tabulador) */
 function formEnterNext(e, nextId) {
   if (e.key !== 'Enter') return;
@@ -1461,6 +1554,11 @@ function delTrans(id){
 // ═══════════════════════════════════════════
 function renderCuentas(){
   const cuentas=get(K.cuentas), trans=get(K.trans);
+
+  const totalSaldo = cuentas.reduce((s,c)=>s+getSaldo(c.id),0);
+  document.getElementById('kpi-grid-cuentas').innerHTML = `
+    <div class="kpi-card gold"><div class="kpi-label">${t('kpi.equity')} ${t('common.total')}</div><div class="kpi-value gold">${fmtNum(totalSaldo)} ${currencySymbol()}</div><div class="kpi-sub">${cuentas.length} ${cuentas.length!==1?t('common.accounts'):t('common.account')} · ${t('common.currentBalance')} ${t('common.asOf')} ${dfmt(new Date().toISOString().slice(0,10))}</div></div>`;
+
   document.getElementById('cuenta-cards').innerHTML=cuentas.map(c=>{
     const s=getSaldo(c.id);
     const nTrans=trans.filter(t=>t.cuentaId==c.id).length;
@@ -2766,9 +2864,11 @@ function _calcInitDrag() {
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/NuContaRG/sw.js')
+      // Ruta relativa: funciona sea cual sea la subcarpeta/repo donde se aloje la app,
+      // y también evita el aviso 404 en entornos de vista previa sin sw.js
+      navigator.serviceWorker.register('sw.js')
         .then(r => console.log('SW registrado:', r.scope))
-        .catch(err => console.warn('SW error:', err));
+        .catch(err => console.warn('SW no disponible en este entorno (normal en vista previa):', err.message));
     });
   }
 </script>
