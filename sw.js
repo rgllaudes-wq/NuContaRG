@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nuconta-v1';
+const CACHE_NAME = 'nuconta-v2'; // ← v2: fuerza a limpiar cualquier caché previa dañada (p.ej. un 404 guardado por error)
 const ASSETS = [
   '/',
   '/index.html',
@@ -16,7 +16,7 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Activate — remove old caches
+// Activate — remove old caches (incluida cualquier versión anterior con datos corruptos)
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -38,11 +38,15 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(request)
         .then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          // Solo se guarda en caché si la respuesta es realmente válida (200 OK).
+          // Así nunca se cachea por error una página de fallo (404, 5xx, etc.)
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
           return response;
         })
-        .catch(() => caches.match(request))
+        .catch(() => caches.match(request).then(cached => cached || caches.match('/index.html')))
     );
     return;
   }
@@ -53,8 +57,10 @@ self.addEventListener('fetch', event => {
       caches.match(request).then(cached => {
         if (cached) return cached;
         return fetch(request).then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          }
           return response;
         });
       })
