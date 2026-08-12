@@ -548,7 +548,7 @@ input[type=checkbox]{accent-color:#3b82f6;width:15px;height:15px;cursor:pointer;
           </div>
           <button class="btn btn-ghost" onclick="FS.pickFile()">📁 <span data-i18n="cfg.file.change">Cambiar archivo / Crear nuevo</span></button>
         </div>
-        <div class="importe-hint" data-i18n="cfg.file.hint" style="display:block;margin-top:10px">Al cambiar de archivo, si ya contiene datos se cargarán automáticamente; si está vacío, se guardará ahí tu información actual.</div>
+        <div class="importe-hint" id="cfg-file-hint" data-i18n="cfg.file.hint" style="display:block;margin-top:10px">Al cambiar de archivo, si ya contiene datos se cargarán automáticamente; si está vacío, se guardará ahí tu información actual.</div>
       </div>
 
       <div class="section-header">
@@ -761,6 +761,7 @@ const I18N = {
     'cfg.file.title':'Archivo de datos', 'cfg.file.sub':'Dónde se guarda automáticamente tu información',
     'cfg.file.current':'Archivo actual', 'cfg.file.change':'Cambiar archivo / Crear nuevo', 'cfg.file.none':'Ninguno conectado',
     'cfg.file.hint':'Al cambiar de archivo, si ya contiene datos se cargarán automáticamente; si está vacío, se guardará ahí tu información actual.',
+    'fs.localOnly':'Guardado solo en este navegador (Firefox no soporta el guardado automático en archivo)', 'fs.localOnlyHint':'Tus datos se guardan igualmente en este navegador de forma automática. Firefox no permite que las webs escriban directamente en un archivo de tu equipo, así que la opción de "Archivo automático" no está disponible aquí. Para tener una copia de seguridad o pasar tus datos a otro equipo, usa "Exportar datos JSON" con regularidad.',
     'cfg.export.json':'Exportar datos JSON', 'cfg.import.json':'Importar datos JSON',
     'cfg.import.csv':'Importar Excel / CSV', 'cfg.import.cats':'Importar categorías/cuentas',
     'page.dashboard':'Inicio', 'page.transacciones':'Movimientos', 'page.cuentas':'Cuentas',
@@ -810,6 +811,7 @@ const I18N = {
     'cfg.file.title':'Data file', 'cfg.file.sub':'Where your information is automatically saved',
     'cfg.file.current':'Current file', 'cfg.file.change':'Change file / Create new', 'cfg.file.none':'None connected',
     'cfg.file.hint':'When you switch files, if it already has data it will load automatically; if empty, your current data will be saved there.',
+    'fs.localOnly':'Saved in this browser only (Firefox does not support automatic file saving)', 'fs.localOnlyHint':'Your data is still saved automatically in this browser. Firefox does not allow websites to write directly to a file on your computer, so the "Auto-save file" option is unavailable here. To back up your data or move it to another device, use "Export JSON data" regularly.',
     'cfg.export.json':'Export JSON data', 'cfg.import.json':'Import JSON data',
     'cfg.import.csv':'Import Excel / CSV', 'cfg.import.cats':'Import categories/accounts',
     'page.dashboard':'Home', 'page.transacciones':'Transactions', 'page.cuentas':'Accounts',
@@ -1467,8 +1469,21 @@ function renderConfiguracion() {
   const sel = document.getElementById('cfg-startday');
   sel.innerHTML = Array.from({length:31}, (_,i)=>i+1).map(d=>`<option value="${d}">${d}</option>`).join('');
   sel.value = cfg.startDay;
-  const fileName = (typeof FS !== 'undefined' && FS.currentFileName) ? FS.currentFileName() : null;
-  document.getElementById('cfg-file-name').textContent = fileName || t('cfg.file.none');
+
+  const fsOk = (typeof FS !== 'undefined') && FS.isSupported();
+  const fileName = fsOk && FS.currentFileName ? FS.currentFileName() : null;
+  const changeBtn = document.querySelector('#page-configuracion button[onclick="FS.pickFile()"]');
+  const hintEl = document.getElementById('cfg-file-hint');
+
+  if (fsOk) {
+    document.getElementById('cfg-file-name').textContent = fileName || t('cfg.file.none');
+    if (changeBtn) changeBtn.style.display = '';
+    if (hintEl) { hintEl.setAttribute('data-i18n','cfg.file.hint'); hintEl.textContent = t('cfg.file.hint'); }
+  } else {
+    document.getElementById('cfg-file-name').textContent = t('fs.localOnly');
+    if (changeBtn) changeBtn.style.display = 'none';
+    if (hintEl) { hintEl.removeAttribute('data-i18n'); hintEl.textContent = t('fs.localOnlyHint'); }
+  }
   applyI18n();
 }
 
@@ -1853,6 +1868,12 @@ const FS = (() => {
     } catch {}
     return false;
   }
+  // Comprueba el permiso SIN disparar el diálogo nativo del navegador
+  // (queryPermission es silencioso; requestPermission es el que muestra el popup)
+  async function _hasPermissionSilent(handle, mode = 'readwrite') {
+    try { return (await handle.queryPermission({ mode })) === 'granted'; }
+    catch { return false; }
+  }
 
   // ── Read ─────────────────────────────────────────────────────────────────
   async function readFile(handle) {
@@ -1959,7 +1980,7 @@ const FS = (() => {
   async function init() {
     // Check browser support
     if (!window.showSaveFilePicker) {
-      _showFsStatus('⚠ Archivo automático no disponible en este navegador', 'warn');
+      _showFsStatus('💾 ' + t('fs.localOnly'), 'warn');
       return;
     }
 
@@ -1968,7 +1989,7 @@ const FS = (() => {
     if (storedHandle) {
       _handle = storedHandle;
       // Try to read silently
-      const canRead = await _ensurePermission(_handle, 'readwrite');
+      const canRead = await _hasPermissionSilent(_handle, 'readwrite');
       if (canRead) {
         const data = await readFile(_handle);
         if (data && data.trans !== undefined) {
@@ -2023,7 +2044,7 @@ const FS = (() => {
     return _handle ? _handle.name : null;
   }
 
-  return { init, pickFile, scheduleSave, reconnect, currentFileName };
+  return { init, pickFile, scheduleSave, reconnect, currentFileName, isSupported: () => !!window.showSaveFilePicker };
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════
